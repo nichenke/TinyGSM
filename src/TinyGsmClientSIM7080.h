@@ -96,8 +96,11 @@ class TinyGsmSim7080 : public TinyGsmSim70xx<TinyGsmSim7080>,
         : GsmClientSim7080(modem, mux) {}
 
    public:
-    bool setCertificate(const String& certificateName) {
-      return at->setCertificate(certificateName, mux);
+    bool setCaCertificate(const String& certificateName) {
+      return at->setCaCertificate(certificateName, mux);
+    }
+    bool setClientCertificate(const String& certificateName) {
+      return at->setClientCertificate(certificateName, mux);
     }
 
     virtual int connect(const char* host, uint16_t port,
@@ -117,7 +120,8 @@ class TinyGsmSim7080 : public TinyGsmSim70xx<TinyGsmSim7080>,
  public:
   explicit TinyGsmSim7080(Stream& stream)
       : TinyGsmSim70xx<TinyGsmSim7080>(stream),
-        certificates() {
+        caCertificates(),
+        clientCertificates() {
     memset(sockets, 0, sizeof(sockets));
   }
 
@@ -203,9 +207,15 @@ class TinyGsmSim7080 : public TinyGsmSim70xx<TinyGsmSim7080>,
    * Secure socket layer functions
    */
  protected:
-  bool setCertificate(const String& certificateName, const uint8_t mux = 0) {
+  bool setCaCertificate(const String& certificateName, const uint8_t mux = 0) {
     if (mux >= TINY_GSM_MUX_COUNT) return false;
-    certificates[mux] = certificateName;
+    caCertificates[mux] = certificateName;
+    return true;
+  }
+  bool setClientCertificate(const String& certificateName,
+                            const uint8_t mux = 0) {
+    if (mux >= TINY_GSM_MUX_COUNT) return false;
+    clientCertificates[mux] = certificateName;
     return true;
   }
 
@@ -372,13 +382,22 @@ class TinyGsmSim7080 : public TinyGsmSim70xx<TinyGsmSim7080>,
       streamSkipUntil('\n');  // read out the certificate information
       waitResponse();
 
-      if (certificates[mux] != "") {
+      if (caCertificates[mux] != "") {
         // apply the correct certificate to the connection
         // AT+CASSLCFG=<cid>,"CACERT",<caname>
         // <cid> Application connection ID (set with AT+CACID above)
         // <certname> certificate name
-        sendAT(GF("+CASSLCFG="), mux, ",CACERT,\"", certificates[mux].c_str(),
+        sendAT(GF("+CASSLCFG="), mux, ",CACERT,\"", caCertificates[mux].c_str(),
                "\"");
+        if (waitResponse(5000L) != 1) return false;
+      }
+      if (clientCertificates[mux] != "") {
+        // apply the correct certificate to the connection
+        // AT+CASSLCFG=<cid>,"CERT",<certname>
+        // <cid> Application connection ID (set with AT+CACID above)
+        // <certname> certificate name
+        sendAT(GF("+CASSLCFG="), mux, ",CERT,\"",
+               clientCertificates[mux].c_str(), "\"");
         if (waitResponse(5000L) != 1) return false;
       }
 
@@ -723,7 +742,8 @@ class TinyGsmSim7080 : public TinyGsmSim70xx<TinyGsmSim7080>,
 
  protected:
   GsmClientSim7080* sockets[TINY_GSM_MUX_COUNT];
-  String            certificates[TINY_GSM_MUX_COUNT];
+  String            caCertificates[TINY_GSM_MUX_COUNT];
+  String            clientCertificates[TINY_GSM_MUX_COUNT];
 };
 
 #endif  // SRC_TINYGSMCLIENTSIM7080_H_
